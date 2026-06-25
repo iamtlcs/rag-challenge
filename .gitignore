@@ -7,8 +7,7 @@ __pycache__/
 .env
 .coverage
 htmlcov/
-data/corpus.jsonl
-data/index/
-data/*.log
+data/*
+!data/.gitkeep
 deploy/package.tar.gz
 deploy/*.env
