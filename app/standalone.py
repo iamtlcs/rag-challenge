@@ -27,6 +27,10 @@ COOKIE_NAME = "rag_session"
 SOURCE_RE = re.compile(r"const\s+QUESTIONS_DATA\s*=\s*(\[.*?\]);", re.S)
 CJK_RE = re.compile(r"[\u4e00-\u9fff]+")
 WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*|\d{4}-\d{2}-\d{2}|\d+")
+ORG_SUFFIX_RE = r"(?:大学|学院|研究设计院|研究院|公司|集团|委员会|中心|实验室|协会|学会|银行|医院|工作组|服务业司|司|部)"
+ORG_CANDIDATE_RE = re.compile(
+    rf"([\u4e00-\u9fffA-Za-z0-9（）()·\-]{{2,40}}{ORG_SUFFIX_RE})"
+)
 
 
 def load_env(path: Path) -> None:
@@ -85,17 +89,28 @@ def merge_article_cache(
     for doc in docs:
         article = by_url.get(doc.get("url", ""))
         if not article:
-            merged.append(doc)
+            metadata_doc = {**doc}
+            metadata_doc.setdefault("retrieval_text", doc.get("text", ""))
+            metadata_doc.setdefault("question_metadata", doc.get("text", ""))
+            metadata_doc.setdefault("has_article_body", False)
+            merged.append(metadata_doc)
             continue
         title = article.get("title") or doc.get("title", "")
         body = article.get("body") or article.get("text") or doc.get("text", "")
+        answer_text = f"{title} {body}".strip()
+        retrieval_text = " ".join(
+            part for part in [answer_text, doc.get("text", "")] if part
+        ).strip()
         merged.append(
             {
                 "url": doc.get("url", ""),
                 "title": title,
                 "date": article.get("date") or doc.get("date", ""),
                 "column": article.get("column") or doc.get("column", ""),
-                "text": f"{title} {body}".strip(),
+                "text": answer_text,
+                "retrieval_text": retrieval_text,
+                "question_metadata": doc.get("text", ""),
+                "has_article_body": True,
             }
         )
     return merged
@@ -128,7 +143,7 @@ def rank_documents(query: str, docs: list[dict[str, str]], top_k: int = 5) -> li
         weighted_tokens.extend(tokenize_bilingual(doc.get("title", "")) * 3)
         weighted_tokens.extend(tokenize_bilingual(doc.get("date", "")) * 4)
         weighted_tokens.extend(tokenize_bilingual(doc.get("column", "")))
-        weighted_tokens.extend(tokenize_bilingual(doc.get("text", "")))
+        weighted_tokens.extend(tokenize_bilingual(doc.get("retrieval_text") or doc.get("text", "")))
         doc_token_counts.append(Counter(weighted_tokens))
     doc_freq: Counter[str] = Counter()
     for counts in doc_token_counts:
@@ -154,6 +169,8 @@ def rank_documents(query: str, docs: list[dict[str, str]], top_k: int = 5) -> li
         date = doc.get("date", "")
         if title and title in query:
             score += 3.0
+            if doc.get("has_article_body"):
+                score += 100.0
         if date and date in query:
             score += 50.0 if query_dates else 1.5
         elif query_dates:
@@ -212,7 +229,27 @@ def direct_answer(question: str, top: dict[str, Any]) -> str:
     normalized = question.lower()
     title = top.get("title", "")
     date = top.get("date", "")
-    text = clean_evidence_text(str(top.get("text", "")), title)
+    raw_text = str(top.get("text", ""))
+    text = clean_evidence_text(raw_text, title)
+
+    asks_person = (
+        "哪位" in question
+        or "who" in normalized
+        or "person" in normalized
+        or "院士" in question
+        or "academician" in normalized
+    )
+    if asks_person:
+        person_text = f"{title} {text}"
+        academician_only = "院士" in question or "academician" in normalized
+        people = extract_people(person_text, academician_only=academician_only)
+        if people:
+            label = "相关院士" if academician_only else "相关人物"
+            return f"{label}是：{'、'.join(people)}。"
+        if academician_only:
+            people = extract_people(title) or extract_people(text)
+            if people:
+                return f"相关人物是：{'、'.join(people)}。"
 
     if date and (
         "what date" in normalized
@@ -223,26 +260,206 @@ def direct_answer(question: str, top: dict[str, Any]) -> str:
     ):
         return f"事件发生日期是 {date}。"
 
-    if "主要讲述" in question or "mainly describe" in normalized or "what aspect" in normalized:
+    if (
+        "主要讲述" in question
+        or "主要内容" in question
+        or "关于什么" in question
+        or "mainly describe" in normalized
+        or "what aspect" in normalized
+        or "main content" in normalized
+    ):
         evidence = first_good_sentence(text) or title
         return f"这篇报道主要讲述：{evidence}"
 
     if "在哪里" in question or "where" in normalized:
+        location = extract_location(text)
+        if location:
+            return f"活动地点是：{location}。"
         evidence = first_good_sentence(text) or "来源中未给出明确地点"
         return f"相关地点信息：{evidence}"
 
     if "多少" in question or "how many" in normalized:
-        number = re.search(r"\d+", text)
-        if number:
-            return f"文中提到的数量是 {number.group(0)}。"
+        count = extract_count(text) or extract_count_hint(
+            str(top.get("question_metadata") or top.get("retrieval_text", ""))
+        )
+        if count:
+            return f"文中提到的数量是 {count}。"
+        return "来源中未明确给出人数或团队数量。"
 
     if "荣誉" in question or "获奖" in question or "honor" in normalized or "award" in normalized:
-        evidence = first_good_sentence(text) or title
+        evidence = extract_award(text) or first_good_sentence(text) or title
         return f"相关荣誉或成果是：{evidence}"
+
+    if (
+        "参与方" in question
+        or "合作机构" in question
+        or "institution" in normalized
+        or "participating parties" in normalized
+        or "org" in normalized
+    ):
+        organisations = extract_organisations(raw_text, title)
+        if organisations:
+            return f"提到的参与方或合作机构包括：{'、'.join(organisations)}。"
 
     evidence = first_good_sentence(text) or text[:180] or title
     suffix = f" 来源：《{title}》" if title else ""
     return f"{evidence}{suffix}"
+
+
+def extract_people(text: str, *, academician_only: bool = False) -> list[str]:
+    if academician_only:
+        patterns = [r"([\u4e00-\u9fff]{2,4})院士"]
+    else:
+        boundary = r"(?=$|[，。、“”\s]|入选|获得|荣获|参加|作为|和)"
+        patterns = [
+            r"([\u4e00-\u9fff]{2,4})院士",
+            rf"(?:博士生|学生|教授|副教授|院长|书记)([\u4e00-\u9fff]{{2,3}}){boundary}",
+            rf"([\u4e00-\u9fff]{{2,3}})(?:教授|副教授|书记|院长|同学|老师){boundary}",
+            r"([\u4e00-\u9fff]{2,3})团队",
+            rf"([\u4e00-\u9fff]{{2,3}})作为{boundary}",
+            rf"导师为([\u4e00-\u9fff]{{2,3}}){boundary}",
+        ]
+    stop_names = {
+        "软件学院",
+        "清华大学",
+        "人工智能",
+        "智能",
+        "学院",
+        "学校",
+        "团队",
+        "医院",
+        "第一医院",
+    }
+    names: list[str] = []
+    for pattern in patterns:
+        for match in re.findall(pattern, text):
+            match = re.sub(r"(入选|获得|荣获|参加|作为|入|获|为|作)$", "", match)
+            match = match.strip("与和及")
+            if len(match) == 3 and match[0] in "院件学系校所":
+                match = match[1:]
+            if len(match) == 3 and match[-1] in "与和及":
+                match = match[:-1]
+            if (
+                match not in names
+                and match not in stop_names
+                and not any(word in match for word in ("学院", "大学", "人工", "智能", "医院"))
+            ):
+                names.append(match)
+    return names[:5]
+
+
+def extract_location(text: str) -> str | None:
+    location_patterns = [
+        r"在([^，。；;]{2,35}(?:楼|厅|室|馆|中心|大学|校区|园|会议室|报告厅|多功能厅))举行",
+        r"在([^，。；;]{2,35}(?:楼|厅|室|馆|中心|大学|校区|园|会议室|报告厅|多功能厅))召开",
+        r"在([^，。；;]{2,35}(?:楼|厅|室|馆|中心|大学|校区|园|局|会议室|报告厅|多功能厅))举办",
+        r"于([^，。；;]{2,35}(?:楼|厅|室|馆|中心|大学|校区|园|会议室|报告厅|多功能厅))举行",
+        r"地点(?:为|是|：|:)([^，。；;]{2,35})",
+    ]
+    for pattern in location_patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def extract_count(text: str) -> str | None:
+    unit = r"(?:余?名|余?人|人|位|个|支|项|团队|队伍)"
+    patterns = [
+        rf"(?:共有|共|约|邀请|组织|吸引|参加|参与|出席)[^\d一二三四五六七八九十百千万]{{0,8}}(\d+)\s*({unit})",
+        rf"(\d+)\s*({unit})(?:[^，。；;]{{0,12}}(?:参加|参与|出席|团队|返校|到场|参会|欢聚))",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return f"{match.group(1)}{match.group(2)}"
+    return None
+
+
+def extract_count_hint(text: str) -> str | None:
+    for match in re.finditer(r"(?<!\d)(\d{1,3})(?!\d)", text):
+        number = match.group(1)
+        if number == "0":
+            continue
+        context = text[max(0, match.start() - 4) : match.end() + 4]
+        if re.search(rf"(?:区|楼|室|教室)\s*{number}|{number}\s*(?:年|月|日|级|届|区|楼|室|教室|点)", context):
+            continue
+        return number
+    return None
+
+
+def extract_award(text: str) -> str | None:
+    for sentence in split_sentences(text):
+        if re.search(r"荣获|获得|获|入选|一等奖|二等奖|三等奖|特等奖|大奖|冠军|奖项|成果", sentence):
+            return sentence
+    return None
+
+
+def extract_organisations(text: str, title: str = "") -> list[str]:
+    organisations: list[str] = []
+
+    def add_candidate(candidate: str) -> None:
+        for piece in split_org_candidate(candidate):
+            item = trim_org_phrase(piece)
+            if not item:
+                continue
+            if any(item == known or item in known for known in organisations):
+                continue
+            organisations[:] = [known for known in organisations if known not in item]
+            organisations.append(item)
+
+    for sentence in split_sentences(f"{title}。{text}"):
+        for match in ORG_CANDIDATE_RE.findall(sentence):
+            add_candidate(match)
+    return organisations[:6]
+
+
+def split_org_candidate(text: str) -> list[str]:
+    parts: list[str] = []
+    remaining = text.strip()
+    while re.search(r"[与和及]", remaining):
+        split_at = None
+        for match in re.finditer(r"[与和及]", remaining):
+            left = remaining[: match.start()].strip(" ，。；;、")
+            if re.search(ORG_SUFFIX_RE + r"$", left):
+                split_at = match.start()
+                break
+        if split_at is None:
+            break
+        parts.append(remaining[:split_at])
+        remaining = remaining[split_at + 1 :].strip()
+    if remaining:
+        parts.append(remaining)
+    return parts or [text]
+
+
+def trim_org_phrase(text: str) -> str:
+    clean = re.sub(r"^[，。；;、与和及\s]*(?:文章|报道|活动中|近日|来自|邀请|由|会议由)?", "", text)
+    clean = re.sub(
+        r"^.*?(?:培训对|简要介绍了|介绍了|讲解了|作为主题详细分享了|详细分享了|分享了|汇报了)",
+        "",
+        clean,
+    )
+    clean = re.sub(r"^(?:在|为|对|本次|此次|通过|推进|提升|组织|培训|相关技术和)+", "", clean)
+    destination = re.search(
+        rf"(?:到|赴)([\u4e00-\u9fffA-Za-z0-9（）()·\-]{{2,40}}{ORG_SUFFIX_RE})$",
+        clean,
+    )
+    if destination:
+        clean = destination.group(1)
+    clean = re.split(
+        r"(?:成立大会|大会|第一次|举行|召开|开展|访问|带队|院长|书记|教授|副司长|司长|副司|参加|主办|承办|合作|交流)",
+        clean,
+    )[0]
+    clean = clean.strip(" ，。；;、与和及")
+    clean = re.sub(
+        rf"^.*?(清华大学软件学院|[\u4e00-\u9fffA-Za-z0-9（）()·\-]{{2,40}}{ORG_SUFFIX_RE})$",
+        r"\1",
+        clean,
+    )
+    if clean in {"学院", "大学", "研究院", "中心"}:
+        return ""
+    return clean if len(clean) >= 2 else ""
 
 
 def clean_evidence_text(text: str, title: str) -> str:
@@ -253,15 +470,18 @@ def clean_evidence_text(text: str, title: str) -> str:
     clean = re.sub(r"On what date.*?(?:occur\?|$)", " ", clean)
     clean = re.sub(r"Where was.*?(?:held\?|$)", " ", clean)
     clean = re.sub(r"What honor.*?(?:receive\?|$)", " ", clean)
+    clean = re.sub(r"《\s*》报道中[^？]*？", " ", clean)
     clean = re.sub(r"文章《[^》]+》[^？]*？", " ", clean)
     clean = re.sub(r"《[^》]+》这篇报道[^？]*？", " ", clean)
     return re.sub(r"\s+", " ", clean).strip()
 
 
+def split_sentences(text: str) -> list[str]:
+    return [part.strip() for part in re.split(r"(?<=[。！？!?])\s*", text) if part.strip()]
+
+
 def first_good_sentence(text: str) -> str:
-    parts = re.split(r"(?<=[。！？!?])\s*", text)
-    for part in parts:
-        clean = part.strip()
+    for clean in split_sentences(text):
         if clean and len(clean) >= 8:
             return clean
     return text.strip()
