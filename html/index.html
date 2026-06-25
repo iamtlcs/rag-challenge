@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="TKE Interview Lab Testing Server — enterprise testing environment." />
+<meta name="robots" content="noindex, nofollow" />
+<title>TKE Interview Lab · Testing Server</title>
+<style>
+  :root {
+    --bg-0: #0a0e1a;
+    --bg-1: #0f1729;
+    --bg-2: #141d33;
+    --line: rgba(148, 163, 184, 0.14);
+    --line-strong: rgba(148, 163, 184, 0.28);
+    --txt-0: #f1f5f9;
+    --txt-1: #cbd5e1;
+    --txt-2: #94a3b8;
+    --txt-3: #64748b;
+    --accent: #38bdf8;
+    --accent-2: #818cf8;
+    --ok: #34d399;
+    --ok-glow: rgba(52, 211, 153, 0.5);
+    --radius: 18px;
+    --maxw: 920px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+            "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    color: var(--txt-1);
+    background: var(--bg-0);
+    background-image:
+      radial-gradient(1100px 700px at 82% -8%, rgba(56, 189, 248, 0.13), transparent 60%),
+      radial-gradient(900px 620px at 8% 105%, rgba(129, 140, 248, 0.12), transparent 58%),
+      linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 22px;
+    position: relative;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* faint engineering grid */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 35%, transparent 78%);
+            mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 35%, transparent 78%);
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .shell {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: var(--maxw);
+    animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(22px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- top status bar ---- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+  }
+
+  .logo {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 8px 26px rgba(56, 189, 248, 0.28);
+    flex-shrink: 0;
+  }
+  .logo svg { width: 26px; height: 26px; display: block; }
+
+  .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+  .brand-text .t1 {
+    font-size: 15px; font-weight: 700; color: var(--txt-0);
+    letter-spacing: 0.02em;
+  }
+  .brand-text .t2 {
+    font-size: 11.5px; color: var(--txt-3);
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 15px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgba(15, 23, 41, 0.6);
+    backdrop-filter: blur(6px);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--txt-1);
+    letter-spacing: 0.03em;
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 0 var(--ok-glow);
+    animation: pulse 2.4s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 var(--ok-glow); }
+    70%  { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  }
+
+  /* ---- main card ---- */
+  .card {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background:
+      linear-gradient(180deg, rgba(20, 29, 51, 0.82) 0%, rgba(15, 23, 41, 0.86) 100%);
+    backdrop-filter: blur(12px);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.05) inset,
+      0 30px 80px -30px rgba(0, 0, 0, 0.7);
+    padding: 52px 48px 44px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+    opacity: 0.7;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 22px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 22px; height: 1px;
+    background: var(--accent);
+    opacity: 0.6;
+  }
+
+  h1 {
+    font-size: clamp(30px, 5.4vw, 52px);
+    line-height: 1.08;
+    font-weight: 800;
+    color: var(--txt-0);
+    letter-spacing: -0.02em;
+    margin-bottom: 14px;
+  }
+  h1 .grad {
+    background: linear-gradient(120deg, #e0f2fe 0%, var(--accent) 42%, var(--accent-2) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle-cn {
+    font-size: clamp(17px, 2.6vw, 22px);
+    font-weight: 600;
+    color: var(--txt-0);
+    letter-spacing: 0.04em;
+    margin-bottom: 18px;
+  }
+
+  .lead {
+    font-size: 15px;
+    color: var(--txt-2);
+    max-width: 620px;
+    margin-bottom: 12px;
+  }
+  .lead.cn { color: var(--txt-2); }
+
+  .divider {
+    height: 1px;
+    background: var(--line);
+    margin: 32px 0;
+  }
+
+  /* ---- meta grid ---- */
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .meta-item {
+    background: rgba(10, 14, 26, 0.55);
+    padding: 18px 20px;
+  }
+  .meta-item .k {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+    margin-bottom: 7px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .meta-item .v {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--txt-0);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .v .mini-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok-glow);
+  }
+
+  /* ---- footer ---- */
+  .foot {
+    margin-top: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--txt-3);
+  }
+  .foot .mono { font-family: var(--mono); letter-spacing: 0.04em; }
+  .foot a { color: var(--txt-2); text-decoration: none; transition: color 0.2s; }
+  .foot a:hover { color: var(--accent); }
+
+  .page-foot {
+    position: relative;
+    z-index: 1;
+    margin-top: 26px;
+    font-size: 11.5px;
+    color: var(--txt-3);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+    a[href="/lab.html"]:hover, a[href="/questions.html"]:hover {
+    border-color: var(--accent); background: rgba(10, 14, 26, 0.65); transform: translateY(-2px);
+  }
+  @media (max-width: 640px) {
+    .card { padding: 36px 24px 30px; }
+    .meta { grid-template-columns: 1fr; }
+    .topbar { justify-content: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shell { animation: none; }
+    .dot { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="shell" role="main">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L3.5 6.5v11L12 22l8.5-4.5v-11L12 2z" stroke="#0a0e1a" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M12 7l4.2 2.3v4.4L12 16l-4.2-2.3V9.3L12 7z" fill="#0a0e1a" fill-opacity="0.85"/>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="t1">TKE Interview Lab</span>
+          <span class="t2">Infrastructure</span>
+        </span>
+      </div>
+      <span class="status-pill">
+        <span class="dot" aria-hidden="true"></span>
+        Operational · 服务正常
+      </span>
+    </header>
+
+    <section class="card">
+      <span class="eyebrow">Testing Environment</span>
+      <h1><span class="grad">TKE Interview Lab</span><br />Testing Server</h1>
+      <p class="subtitle-cn">TKE 面试实验 · 测试服务器</p>
+
+      <p class="lead">
+        This server hosts the TKE interview laboratory testing environment.
+        It is provisioned for evaluation and technical assessment purposes only.
+      </p>
+      <p class="lead cn">
+        本服务器用于承载 TKE 面试实验测试环境，仅供技术评估与考核演示使用。
+      </p>
+
+      
+    <h2 style="font-size: clamp(22px, 3.5vw, 32px); font-weight: 700; color: var(--txt-0); margin: 28px 0 18px; display: flex; align-items: center; gap: 12px;">
+      <span style="width: 4px; height: 24px; background: var(--accent); border-radius: 2px;"></span>
+      RAG Challenge / RAG 挑战
+    </h2>
+    <p class="lead">
+      TKE Interview Lab hosts a technical assessment challenge for building a production-grade RAG (Retrieval-Augmented Generation) system.
+      Candidates must implement a full-site knowledge base chatbot with authentication, deploy it publicly, and submit code for review.
+    </p>
+    <p class="lead cn">
+      TKE 面试实验室提供一个技术评估挑战，用于构建生产级 RAG（检索增强生成）系统。
+      候选人必须实现带认证的全站知识库聊天机器人，公开部署，并提交代码供审查。
+    </p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 24px 0 32px;">
+      <a href="/lab.html" style="display: block; border: 1px solid var(--line-strong); border-radius: 14px; padding: 22px 24px; background: rgba(10, 14, 26, 0.4); text-decoration: none; transition: all 0.2s;">
+        <div style="font-size: 28px; margin-bottom: 12px;">📋</div>
+        <div style="font-size: 17px; font-weight: 700; color: var(--txt-0); margin-bottom: 8px;">Challenge Brief</div>
+        <div style="font-size: 13px; color: var(--txt-2); line-height: 1.5;">Complete challenge specification with requirements, deliverables, evaluation criteria, and submission format.</div>
+        <div style="font-size: 12px; color: var(--accent); margin-top: 12px; font-weight: 600;">View Details →</div>
+      </a>
+      <a href="/questions.html" style="display: block; border: 1px solid var(--line-strong); border-radius: 14px; padding: 22px 24px; background: rgba(10, 14, 26, 0.4); text-decoration: none; transition: all 0.2s;">
+        <div style="font-size: 28px; margin-bottom: 12px;">❓</div>
+        <div style="font-size: 17px; font-weight: 700; color: var(--txt-0); margin-bottom: 8px;">1000 Evaluation Questions</div>
+        <div style="font-size: 13px; color: var(--txt-2); line-height: 1.5;">Bilingual question set for testing RAG accuracy. Searchable, categorized, with source links.</div>
+        <div style="font-size: 12px; color: var(--accent); margin-top: 12px; font-weight: 600;">Browse Questions →</div>
+      </a>
+    </div>
+
+    <h2 style="font-size: clamp(22px, 3.5vw, 32px); font-weight: 700; color: var(--txt-0); margin: 32px 0 18px; display: flex; align-items: center; gap: 12px;">
+      <span style="width: 4px; height: 24px; background: var(--ok); border-radius: 2px;"></span>
+      Server Specifications / 服务器规格
+    </h2>
+    <p class="lead">
+      This Ubuntu server is provided to candidates for deploying their RAG chatbot.
+      SSH access credentials are included in the challenge brief.
+    </p>
+    <p class="lead cn" style="color: var(--txt-2);">
+      此 Ubuntu 服务器提供给候选人用于部署 RAG 聊天机器人。SSH 访问凭证已包含在挑战说明中。
+    </p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 24px 0 32px;">
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">Processor / 处理器</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">16-core Xeon Gold 6248</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">@ 2.50GHz</div>
+      </div>
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">Memory / 内存</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">16 GB RAM</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">DDR4</div>
+      </div>
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">Storage / 存储</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">100 GB SSD</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">~95 GB available</div>
+      </div>
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">OS / 操作系统</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">Ubuntu 22.04 LTS</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">Jammy Jellyfish</div>
+      </div>
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">Access / 访问</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">123.59.90.15:8443</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">SSH + HTTPS</div>
+      </div>
+      <div style="background: rgba(10, 14, 26, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;">
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3); margin-bottom: 8px; font-family: var(--mono);">Services / 服务</div>
+        <div style="font-size: 15px; font-weight: 600; color: var(--txt-0);">Nginx + Python 3.10</div>
+        <div style="font-size: 12px; color: var(--txt-2); margin-top: 4px;">Ready for deployment</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <h2 style="font-size: clamp(22px, 3.5vw, 32px); font-weight: 700; color: var(--txt-0); margin: 32px 0 18px; display: flex; align-items: center; gap: 12px;">
+      <span style="width: 4px; height: 24px; background: var(--accent); border-radius: 2px;"></span>
+      Contact / 联系方式
+    </h2>
+    <p class="lead">
+      Questions about the RAG Challenge? Contact us at
+      <a href="mailto:will.wang2@tkelevator.com" style="color: var(--accent); text-decoration: none; font-weight: 600;">
+        will.wang2@tkelevator.com
+      </a>
+    </p>
+    <p class="lead cn" style="color: var(--txt-2);">
+      关于 RAG 挑战有疑问？请联系
+      <a href="mailto:will.wang2@tkelevator.com" style="color: var(--accent); text-decoration: none; font-weight: 600;">
+        will.wang2@tkelevator.com
+      </a>
+    </p>
+
+    <div class="divider"></div>
+
+      <div class="meta">
+        <div class="meta-item">
+          <div class="k">Status · 状态</div>
+          <div class="v"><span class="mini-dot"></span>Online / 在线</div>
+        </div>
+        <div class="meta-item">
+          <div class="k">Service · 服务</div>
+          <div class="v">Nginx / Web</div>
+        </div>
+        <div class="meta-item">
+          <div class="k">Environment · 环境</div>
+          <div class="v">Lab / Testing</div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span class="mono">TKE&nbsp;·&nbsp;Interview&nbsp;Lab&nbsp;·&nbsp;Testing&nbsp;Server</span>
+        <span class="mono">HTTP&nbsp;200&nbsp;·&nbsp;READY</span>
+      </div>
+    </section>
+
+    <p class="page-foot">
+      © <span id="yr">2026</span> TKE Interview Lab · Authorized testing use only / 仅限授权测试使用
+    </p>
+  </main>
+  <script>
+    document.getElementById('yr').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

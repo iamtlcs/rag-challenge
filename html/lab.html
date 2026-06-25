@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="TKE Interview Lab — RAG System Challenge Brief" />
+<meta name="robots" content="noindex, nofollow" />
+<title>RAG Challenge Brief · TKE Interview Lab</title>
+<style>
+:root {
+  --bg-0: #0a0e1a; --bg-1: #0f1729; --bg-2: #141d33;
+  --line: rgba(148, 163, 184, 0.14); --line-strong: rgba(148, 163, 184, 0.28);
+  --txt-0: #f1f5f9; --txt-1: #cbd5e1; --txt-2: #94a3b8; --txt-3: #64748b;
+  --accent: #38bdf8; --accent-2: #818cf8; --warn: #fbbf24; --ok: #34d399;
+  --radius: 18px; --maxw: 1080px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  min-height: 100vh; font-family: var(--font); color: var(--txt-1);
+  background: var(--bg-0);
+  background-image:
+    radial-gradient(1100px 700px at 82% -8%, rgba(56, 189, 248, 0.13), transparent 60%),
+    radial-gradient(900px 620px at 8% 105%, rgba(129, 140, 248, 0.12), transparent 58%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  padding: 40px 22px 60px; position: relative; line-height: 1.65;
+}
+body::before {
+  content: ""; position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 35%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 35%, transparent 78%);
+  opacity: 0.5; pointer-events: none; z-index: 0;
+}
+.shell {
+  position: relative; z-index: 1; width: 100%; max-width: var(--maxw); margin: 0 auto;
+  animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 13px; }
+.logo {
+  width: 46px; height: 46px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  display: grid; place-items: center; box-shadow: 0 8px 26px rgba(56, 189, 248, 0.28); flex-shrink: 0;
+}
+.logo svg { width: 26px; height: 26px; display: block; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand-text .t1 { font-size: 15px; font-weight: 700; color: var(--txt-0); letter-spacing: 0.02em; }
+.brand-text .t2 { font-size: 11.5px; color: var(--txt-3); letter-spacing: 0.16em; text-transform: uppercase; }
+.nav-pill {
+  display: inline-flex; align-items: center; gap: 9px; padding: 8px 15px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: rgba(15, 23, 41, 0.6); backdrop-filter: blur(6px);
+  font-size: 12.5px; font-weight: 600; color: var(--txt-1); text-decoration: none;
+  transition: all 0.2s;
+}
+.nav-pill:hover { border-color: var(--accent); color: var(--accent); }
+.card {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(20, 29, 51, 0.82) 0%, rgba(15, 23, 41, 0.86) 100%);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+  padding: 52px 48px 44px; position: relative; overflow: hidden; margin-bottom: 24px;
+}
+.card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent); opacity: 0.7;
+}
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono);
+  font-size: 11.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px;
+}
+.eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); opacity: 0.6; }
+h1 {
+  font-size: clamp(32px, 5vw, 48px); line-height: 1.1; font-weight: 800; color: var(--txt-0);
+  letter-spacing: -0.02em; margin-bottom: 16px;
+}
+h1 .grad {
+  background: linear-gradient(120deg, #e0f2fe 0%, var(--accent) 42%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.subtitle { font-size: clamp(17px, 2.6vw, 21px); font-weight: 600; color: var(--txt-0); letter-spacing: 0.02em; margin-bottom: 18px; }
+.lead { font-size: 15.5px; color: var(--txt-2); margin-bottom: 12px; max-width: 760px; }
+.divider { height: 1px; background: var(--line); margin: 36px 0; }
+h2 {
+  font-size: clamp(20px, 3vw, 28px); font-weight: 700; color: var(--txt-0); margin: 32px 0 18px;
+  display: flex; align-items: center; gap: 12px;
+}
+h2::before { content: ""; width: 4px; height: 22px; background: var(--accent); border-radius: 2px; }
+h3 {
+  font-size: 19px; font-weight: 600; color: var(--txt-0); margin: 24px 0 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+h3::before { content: "▸"; color: var(--accent-2); font-size: 18px; }
+p { margin-bottom: 14px; }
+ul, ol { margin: 14px 0 14px 24px; }
+li { margin-bottom: 10px; color: var(--txt-1); }
+code, .mono {
+  font-family: var(--mono); background: rgba(56, 189, 248, 0.08);
+  padding: 3px 8px; border-radius: 6px; font-size: 0.92em; color: var(--accent);
+}
+.highlight-box {
+  background: rgba(251, 191, 36, 0.08); border-left: 3px solid var(--warn);
+  padding: 18px 22px; border-radius: 10px; margin: 20px 0;
+}
+.highlight-box strong { color: var(--warn); }
+.info-box {
+  background: rgba(56, 189, 248, 0.08); border-left: 3px solid var(--accent);
+  padding: 18px 22px; border-radius: 10px; margin: 20px 0;
+}
+.ok-box {
+  background: rgba(52, 211, 153, 0.08); border-left: 3px solid var(--ok);
+  padding: 18px 22px; border-radius: 10px; margin: 20px 0;
+}
+.spec-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 24px 0;
+}
+.spec-item {
+  background: rgba(10, 14, 26, 0.55); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+}
+.spec-item .k {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--txt-3); margin-bottom: 8px;
+}
+.spec-item .v { font-size: 15px; font-weight: 600; color: var(--txt-0); }
+.footer-link {
+  display: inline-flex; align-items: center; gap: 8px; color: var(--accent); text-decoration: none;
+  font-weight: 600; transition: color 0.2s;
+}
+.footer-link:hover { color: var(--accent-2); }
+.footer-link svg { width: 16px; height: 16px; }
+@media (max-width: 640px) {
+  .card { padding: 36px 24px 30px; }
+  h2 { font-size: 22px; }
+  .spec-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3.5 6.5v11L12 22l8.5-4.5v-11L12 2z" stroke="#0a0e1a" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M12 7l4.2 2.3v4.4L12 16l-4.2-2.3V9.3L12 7z" fill="#0a0e1a" fill-opacity="0.85"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="t1">TKE Interview Lab</span>
+        <span class="t2">Technical Assessment</span>
+      </span>
+    </div>
+    <a href="/" class="nav-pill">← Back to Home</a>
+  </header>
+
+  <article class="card">
+    <span class="eyebrow">Challenge Brief</span>
+    <h1><span class="grad">RAG System</span><br />Implementation Challenge</h1>
+    <p class="subtitle">RAG 系统实现挑战 — Full-Site Knowledge Base + AI Chatbot</p>
+
+    <p class="lead">
+      Build a production-grade Retrieval-Augmented Generation (RAG) chatbot that can answer questions about
+      an entire website corpus. This challenge tests your ability to architect, implement, and deploy a complete
+      AI-powered knowledge retrieval system.
+    </p>
+    <p class="lead" style="color: var(--txt-2);">
+      构建一个生产级的检索增强生成（RAG）聊天机器人，能够回答关于完整站点语料库的问题。
+      本挑战测试你设计、实现和部署完整 AI 驱动知识检索系统的能力。
+    </p>
+
+    <div class="divider"></div>
+
+    <h2>📋 Challenge Overview / 挑战概述</h2>
+    <p>
+      You are required to build a RAG-based question-answering system that ingests, indexes, and retrieves
+      information from a real Chinese university website. The system must handle bilingual content (Chinese + English),
+      support conversational queries, and provide accurate, citation-backed answers.
+    </p>
+    <p style="color: var(--txt-2);">
+      你需要构建一个基于 RAG 的问答系统，从真实的中国大学网站中摄取、索引和检索信息。
+      系统必须处理双语内容（中文+英文），支持对话式查询，并提供准确的、有引用支持的答案。
+    </p>
+
+    <h2>🎯 Target Corpus / 目标语料库</h2>
+    <div class="spec-grid">
+      <div class="spec-item">
+        <div class="k">Source Website / 源站点</div>
+        <div class="v"><a href="https://www.thss.tsinghua.edu.cn/" target="_blank" style="color: var(--accent); text-decoration: none;">www.thss.tsinghua.edu.cn</a></div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Site Name / 站点名称</div>
+        <div class="v">清华大学软件学院<br><span style="font-size: 13px; color: var(--txt-2);">Tsinghua School of Software</span></div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Corpus Size / 语料规模</div>
+        <div class="v">~850 pages / ~850 页</div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Content Types / 内容类型</div>
+        <div class="v">News, announcements, faculty info<br><span style="font-size: 13px; color: var(--txt-2);">新闻、公告、师资信息</span></div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Media Assets / 媒体资产</div>
+        <div class="v">Text + Images / 文本+图片</div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Crawl Strategy / 爬取策略</div>
+        <div class="v"><strong>Full-site crawl</strong><br><span style="font-size: 13px; color: var(--txt-2);">全站抓取（所有栏目）</span></div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <strong>Corpus Structure / 语料结构：</strong><br>
+      The site is organized into 5 main columns with paginated list pages. Each article contains: title, date, summary, body text, and accompanying images.
+      Key columns: 新闻动态 (~650 articles), 学生动态 (~70), 学院风采 (~40), 科研成果, 招聘信息.<br><br>
+      站点分为 5 个主要栏目，带分页列表。每篇文章包含：标题、日期、摘要、正文、配图。
+      主要栏目：新闻动态（~650篇）、学生动态（~70）、学院风采（~40）、科研成果、招聘信息。
+    </div>
+
+    <h2>✅ Required Deliverables / 必需交付物</h2>
+
+    <h3>1. Deployed RAG Chatbot with Authentication / 已部署的 RAG 聊天机器人（带认证）</h3>
+    <p><strong>You must deploy a working web application with the following requirements:</strong></p>
+    <p style="color: var(--txt-2);"><strong>你必须部署一个具有以下要求的工作 Web 应用：</strong></p>
+    <ul>
+      <li><strong>Login authentication:</strong> Username/password login gate before access to chatbot (simple is fine, even hardcoded credentials for demo)<br>
+          <span style="color: var(--txt-2);">登录认证：聊天机器人访问前的用户名/密码登录门槛（简单即可，demo 用硬编码凭证也行）</span></li>
+      <li><strong>Chat interface:</strong> User-friendly conversational UI with message history<br>
+          <span style="color: var(--txt-2);">聊天界面：用户友好的对话 UI，带消息历史记录</span></li>
+      <li><strong>RAG pipeline:</strong> Must actually retrieve from indexed corpus and generate answers (not just an API wrapper)<br>
+          <span style="color: var(--txt-2);">RAG 管道：必须真正从索引语料库检索并生成答案（不仅仅是 API 包装器）</span></li>
+      <li><strong>Citation/source links:</strong> Each answer should cite which article(s) it drew from<br>
+          <span style="color: var(--txt-2);">引用/来源链接：每个答案应引用其来源文章</span></li>
+      <li><strong>Publicly accessible URL:</strong> Your chatbot must be accessible via HTTPS on the provided server (123.59.90.15:8443). IP address access is sufficient (no domain name required).<br>
+          <span style="color: var(--txt-2);">公开可访问 URL：你的聊天机器人必须通过 HTTPS 在提供的服务器（123.59.90.15:8443）上访问。IP 地址访问即可（无需域名）。</span></li>
+    </ul>
+
+    <div class="highlight-box">
+      <strong>⚠️ Critical Requirement / 关键要求：</strong><br>
+      The chatbot MUST be behind authentication. You must provide test credentials (username + password) in your submission email so evaluators can access your system. Systems without login will not be considered complete.<br><br>
+      聊天机器人<strong>必须</strong>有认证保护。你必须在提交邮件中提供测试凭证（用户名+密码），以便评估者访问你的系统。没有登录的系统将被视为不完整。
+    </div>
+
+    <h3>2. Public GitHub Repository / 公开 GitHub 代码仓库</h3>
+    <p><strong>You must provide a public GitHub repo containing:</strong></p>
+    <p style="color: var(--txt-2);"><strong>你必须提供一个公开 GitHub 仓库，包含：</strong></p>
+    <ul>
+      <li><strong>Complete source code:</strong> All crawlers, indexing scripts, backend API, frontend UI<br>
+          <span style="color: var(--txt-2);">完整源代码：所有爬虫、索引脚本、后端 API、前端 UI</span></li>
+      <li><strong>README.md:</strong> Clear setup instructions, architecture diagram, technology stack<br>
+          <span style="color: var(--txt-2);">README.md：清晰的设置说明、架构图、技术栈</span></li>
+      <li><strong>requirements.txt / package.json:</strong> All dependencies listed<br>
+          <span style="color: var(--txt-2);">requirements.txt / package.json：列出所有依赖项</span></li>
+      <li><strong>Configuration examples:</strong> .env.example or config templates (no secrets committed)<br>
+          <span style="color: var(--txt-2);">配置示例：.env.example 或配置模板（不提交密钥）</span></li>
+      <li><strong>License:</strong> Open-source license (MIT, Apache 2.0, etc.)<br>
+          <span style="color: var(--txt-2);">许可证：开源许可证（MIT、Apache 2.0 等）</span></li>
+    </ul>
+
+    <div class="ok-box">
+      <strong>Why public repo? / 为什么要公开仓库？</strong><br>
+      TKE evaluators will review your code for quality, architecture decisions, and adherence to best practices.
+      This is as important as the working demo. Private repos will not be accepted unless explicitly arranged in advance.<br><br>
+      TKE 评估者将审查你的代码质量、架构决策和最佳实践的遵循情况。这与工作演示同等重要。
+      除非提前明确安排，否则不接受私有仓库。
+    </div>
+
+    <h2>📊 Evaluation Criteria / 评估标准</h2>
+    <ol>
+      <li><strong>Correctness (40%) / 正确性：</strong> How accurately does the system answer questions from the <a href="/questions.html" style="color: var(--accent);">evaluation question set</a>?<br>
+          <span style="color: var(--txt-2);">系统回答<a href="/questions.html" style="color: var(--accent);">评估问题集</a>的准确度如何？</span></li>
+      <li><strong>Code Quality (30%) / 代码质量：</strong> Clean architecture, proper error handling, documentation, testability<br>
+          <span style="color: var(--txt-2);">清晰的架构、适当的错误处理、文档、可测试性</span></li>
+      <li><strong>System Design (20%) / 系统设计：</strong> Scalability, modularity, choice of tech stack, chunking/embedding strategy<br>
+          <span style="color: var(--txt-2);">可扩展性、模块化、技术栈选择、分块/嵌入策略</span></li>
+      <li><strong>UX & Deployment (10%) / UX 与部署：</strong> Usability of the chat interface, deployment robustness, auth implementation<br>
+          <span style="color: var(--txt-2);">聊天界面可用性、部署稳定性、认证实现</span></li>
+    </ol>
+
+    <h2>🚫 Rules & Constraints / 规则与约束</h2>
+    <ul>
+      <li><strong>Ethical crawling:</strong> Respect <code>robots.txt</code>, use polite rate limiting (1-2 req/sec), set proper User-Agent<br>
+          <span style="color: var(--txt-2);">合规爬取：遵守 robots.txt、使用礼貌限速（1-2 req/sec）、设置合适的 User-Agent</span></li>
+      <li><strong>No data redistribution:</strong> You may index the content for your RAG system, but do not publicly republish the raw corpus<br>
+          <span style="color: var(--txt-2);">不得数据再分发：你可以索引内容用于 RAG 系统，但不得公开重新发布原始语料库</span></li>
+      <li><strong>Original work:</strong> You must write your own code. You may use libraries/frameworks, but not copy entire RAG implementations from tutorials<br>
+          <span style="color: var(--txt-2);">原创作品：你必须编写自己的代码。可以使用库/框架，但不得从教程复制完整 RAG 实现</span></li>
+      <li><strong>LLM usage:</strong> You may use any LLM API (OpenAI, Anthropic, open-source models) for generation, but the RAG pipeline must be your implementation<br>
+          <span style="color: var(--txt-2);">LLM 使用：你可以使用任何 LLM API（OpenAI、Anthropic、开源模型）生成，但 RAG 管道必须是你的实现</span></li>
+    </ul>
+
+    <h2>📦 Submission Format / 提交格式</h2>
+
+    <div class="highlight-box" style="background: rgba(255, 200, 0, 0.1); border: 1px solid rgba(255, 200, 0, 0.3); margin-bottom: 20px;">
+      <strong>⚠️ Deployment Requirement / 部署要求：</strong><br>
+      You <strong>MUST</strong> deploy your RAG chatbot on the provided server (123.59.90.15:8443). You are <strong>explicitly allowed to replace or overwrite this challenge site (including this page)</strong>: stop the current nginx service and publish your own application in its place. This is expected and will not affect your evaluation. (Tip: save a copy of the question set page first.) External hosting (Vercel, Render, Railway, etc.) is <strong>NOT ACCEPTED</strong>.<br><br>
+      你<strong>必须</strong>在提供的服务器（123.59.90.15:8443）上部署 RAG 聊天机器人。<strong>明确允许你替换或覆盖本挑战站点（包括本页面）</strong>：你可以停止当前的 nginx 服务，用你自己的应用取而代之。这是预期操作，不会影响评分。（建议先保存一份问题集页面。）<strong>不接受</strong>外部托管（Vercel、Render、Railway 等）。
+    </div>
+
+    <div class="info-box">
+      <strong>Submit via email to:</strong> <code>will.wang2@tkelevator.com</code><br>
+      <strong>Subject line:</strong> <code>[RAG Challenge] Your Name</code><br><br>
+      <strong>Email body must include:</strong>
+      <ul style="margin-top: 12px;">
+        <li>Your name and contact info / 你的姓名和联系方式</li>
+        <li>Deployed chatbot URL (must be on 123.59.90.15:8443) / 已部署聊天机器人 URL（必须在 123.59.90.15:8443 上）</li>
+        <li>Test credentials (username + password) / 测试凭证（用户名+密码）</li>
+        <li>Public GitHub repo URL / 公开 GitHub 仓库 URL</li>
+        <li>Brief tech stack summary (1-2 paragraphs) / 简要技术栈总结（1-2 段）</li>
+        <li>Any known limitations or notes / 任何已知限制或注意事项</li>
+      </ul>
+    </div>
+
+    <h2>⏱️ Timeline & Resources / 时间线与资源</h2>
+    <div class="spec-grid">
+      <div class="spec-item">
+        <div class="k">Evaluation Question Set / 评估问题集</div>
+        <div class="v"><a href="/questions.html" style="color: var(--accent); text-decoration: none;">View 1000 Questions →</a></div>
+      </div>
+      <div class="spec-item">
+        <div class="k">Test Server Access / 测试服务器访问</div>
+        <div class="v">
+          Host: <code style="font-size: 12px;">123.59.90.15:8443</code><br>
+          User: <code style="font-size: 12px;">root</code><br>
+          Pass: <code style="font-size: 12px;">ask interview admin</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2);">
+      <strong>⏱️ Timeline / 时间线：</strong><br>
+      This is a <strong>24-hour challenge</strong> (1 day). You may submit anytime within 24 hours from when you receive the challenge. We recommend completing and submitting within 8 hours if possible.<br><br>
+      这是一个 <strong>24 小时挑战</strong>（1 天）。你可以在收到挑战后的 24 小时内任何时候提交。我们建议在 8 小时内完成并提交（如果可能）。
+    </div>
+
+    <div class="divider"></div>
+
+    <div style="text-align: center; margin-top: 32px;">
+      <a href="/questions.html" class="footer-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+        View 1000 Evaluation Questions / 查看 1000 道评估问题
+      </a>
+    </div>
+  </article>
+
+  <p style="position: relative; z-index: 1; margin-top: 26px; font-size: 11.5px; color: var(--txt-3); letter-spacing: 0.05em; text-align: center;">
+    © <span id="yr">2026</span> TKE Interview Lab · RAG Challenge Brief v1.0
+  </p>
+</main>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>
