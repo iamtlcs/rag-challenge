@@ -1,4 +1,5 @@
-FROM python:3.10-slim
+ARG PYTHON_IMAGE=docker.m.daocloud.io/python:3.10-slim
+FROM ${PYTHON_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
