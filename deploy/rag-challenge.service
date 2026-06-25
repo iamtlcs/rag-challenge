@@ -1,0 +1,15 @@
+[Unit]
+Description=TKE RAG Challenge FastAPI app
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rag-challenge
+EnvironmentFile=/opt/rag-challenge/.env
+ExecStart=/opt/rag-challenge/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
