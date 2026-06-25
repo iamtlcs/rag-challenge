@@ -5,6 +5,8 @@ from app.standalone import (
     compose_answer,
     make_session_token,
     rank_documents,
+    merge_article_cache,
+    tokenize_bilingual,
     verify_session_token,
 )
 
@@ -44,7 +46,7 @@ def test_standalone_rank_documents_finds_relevant_result():
         },
         {
             "title": "羽毛球比赛",
-            "text": "学生参加羽毛球比赛。",
+            "text": "本科学生参加羽毛球比赛。",
             "url": "https://example.com/b",
             "date": "",
             "column": "学生动态",
@@ -55,6 +57,87 @@ def test_standalone_rank_documents_finds_relevant_result():
 
     assert results[0]["title"].startswith("软件学院党委书记")
     assert results[0]["score"] > results[1]["score"]
+
+
+def test_bilingual_tokenizer_keeps_english_words_dates_and_chinese_ngrams():
+    tokens = tokenize_bilingual("What happened on 2023-09-14 软件学院讲党课?")
+
+    assert "what" in tokens
+    assert "2023-09-14" in tokens
+    assert "软件" in tokens
+    assert "党课" in tokens
+
+
+def test_rank_documents_boosts_exact_title_and_date_matches():
+    docs = [
+        {
+            "title": "软件学院师生获得2023建筑智能技术解决方案奖",
+            "text": "获得了2023年技术解决方案奖。",
+            "url": "https://example.com/wrong",
+            "date": "2023-10-08",
+            "column": "新闻动态",
+        },
+        {
+            "title": "软件学院党委书记为2023级本科新生讲党课",
+            "text": "9月10日，软件学院党委书记王斌为软件学院2023级本科新生讲授第一堂党课。",
+            "url": "https://example.com/right",
+            "date": "2023-09-14",
+            "column": "新闻动态",
+        },
+    ]
+
+    results = rank_documents("What happened on 2023-09-14 in 软件学院党委书记为2023级本科新生讲党课?", docs)
+
+    assert results[0]["url"] == "https://example.com/right"
+
+
+def test_rank_documents_prioritizes_exact_date_for_english_date_query():
+    docs = [
+        {
+            "title": "Hybrid Transaction and Analytics Processing",
+            "text": "IBM Fellow, database processing, analytics, School of Software seminar.",
+            "url": "https://example.com/english",
+            "date": "2019-01-11",
+            "column": "新闻动态",
+        },
+        {
+            "title": "软件学院党委书记为2023级本科新生讲党课",
+            "text": "9月10日，软件学院党委书记王斌为软件学院2023级本科新生讲授第一堂党课。",
+            "url": "https://example.com/date",
+            "date": "2023-09-14",
+            "column": "新闻动态",
+        },
+    ]
+
+    results = rank_documents("What happened on 2023-09-14 at the School of Software?", docs)
+
+    assert results[0]["url"] == "https://example.com/date"
+
+
+def test_merge_article_cache_replaces_question_metadata_with_body_text():
+    docs = [
+        {
+            "title": "软件学院党委书记为2023级本科新生讲党课",
+            "text": "question metadata only",
+            "url": "https://example.com/a",
+            "date": "2023-09-14",
+            "column": "新闻动态",
+        }
+    ]
+    articles = [
+        {
+            "title": "软件学院党委书记为2023级本科新生讲党课",
+            "body": "9月10日，软件学院党委书记王斌为软件学院2023级本科新生讲授第一堂党课。文章还介绍了理想信念教育。",
+            "url": "https://example.com/a",
+            "date": "2023-09-14",
+            "column": "新闻动态",
+        }
+    ]
+
+    merged = merge_article_cache(docs, articles)
+
+    assert "理想信念教育" in merged[0]["text"]
+    assert merged[0]["title"] == "软件学院党委书记为2023级本科新生讲党课"
 
 
 def test_standalone_session_token_round_trips():

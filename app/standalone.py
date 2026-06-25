@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,8 +22,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 QUESTIONS_PATH = ROOT / "html" / "questions.html"
+ARTICLE_CACHE_PATH = ROOT / "data" / "articles.json"
 COOKIE_NAME = "rag_session"
 SOURCE_RE = re.compile(r"const\s+QUESTIONS_DATA\s*=\s*(\[.*?\]);", re.S)
+CJK_RE = re.compile(r"[\u4e00-\u9fff]+")
+WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*|\d{4}-\d{2}-\d{2}|\d+")
 
 
 def load_env(path: Path) -> None:
@@ -66,26 +70,96 @@ def build_documents_from_questions_html(html_text: str) -> list[dict[str, str]]:
     return list(docs_by_url.values())
 
 
-def char_ngrams(text: str, n: int = 2) -> set[str]:
-    clean = re.sub(r"\s+", "", text.lower())
-    if len(clean) <= n:
-        return {clean} if clean else set()
-    return {clean[i : i + n] for i in range(len(clean) - n + 1)}
+def load_article_cache(path: Path = ARTICLE_CACHE_PATH) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def merge_article_cache(
+    docs: list[dict[str, str]],
+    articles: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    by_url = {article.get("url", ""): article for article in articles}
+    merged: list[dict[str, str]] = []
+    for doc in docs:
+        article = by_url.get(doc.get("url", ""))
+        if not article:
+            merged.append(doc)
+            continue
+        title = article.get("title") or doc.get("title", "")
+        body = article.get("body") or article.get("text") or doc.get("text", "")
+        merged.append(
+            {
+                "url": doc.get("url", ""),
+                "title": title,
+                "date": article.get("date") or doc.get("date", ""),
+                "column": article.get("column") or doc.get("column", ""),
+                "text": f"{title} {body}".strip(),
+            }
+        )
+    return merged
+
+
+def tokenize_bilingual(text: str) -> list[str]:
+    lowered = text.lower()
+    tokens = WORD_RE.findall(lowered)
+    for segment in CJK_RE.findall(text):
+        if len(segment) == 1:
+            tokens.append(segment)
+            continue
+        for n in (2, 3):
+            if len(segment) >= n:
+                tokens.extend(segment[i : i + n] for i in range(len(segment) - n + 1))
+        if len(segment) <= 6:
+            tokens.append(segment)
+    return tokens
 
 
 def rank_documents(query: str, docs: list[dict[str, str]], top_k: int = 5) -> list[dict[str, Any]]:
-    query_terms = char_ngrams(query, 2) | set(re.findall(r"[A-Za-z0-9]+", query.lower()))
-    if not query_terms:
+    query_tokens = tokenize_bilingual(query)
+    if not query_tokens:
         return []
-    ranked: list[dict[str, Any]] = []
+    query_dates = set(re.findall(r"\d{4}-\d{2}-\d{2}", query))
+    query_counts = Counter(query_tokens)
+    doc_token_counts = []
     for doc in docs:
-        text = f"{doc.get('title', '')} {doc.get('text', '')}"
-        doc_terms = char_ngrams(text, 2) | set(re.findall(r"[A-Za-z0-9]+", text.lower()))
-        if not doc_terms:
+        weighted_tokens = []
+        weighted_tokens.extend(tokenize_bilingual(doc.get("title", "")) * 3)
+        weighted_tokens.extend(tokenize_bilingual(doc.get("date", "")) * 4)
+        weighted_tokens.extend(tokenize_bilingual(doc.get("column", "")))
+        weighted_tokens.extend(tokenize_bilingual(doc.get("text", "")))
+        doc_token_counts.append(Counter(weighted_tokens))
+    doc_freq: Counter[str] = Counter()
+    for counts in doc_token_counts:
+        doc_freq.update(counts.keys())
+
+    total_docs = max(len(docs), 1)
+    ranked: list[dict[str, Any]] = []
+    avg_len = sum(sum(counts.values()) for counts in doc_token_counts) / max(len(doc_token_counts), 1)
+    for doc, counts in zip(docs, doc_token_counts):
+        doc_len = max(sum(counts.values()), 1)
+        if not counts:
             continue
-        overlap = query_terms & doc_terms
-        score = len(overlap) / math.sqrt(len(query_terms) * len(doc_terms))
-        ranked.append({**doc, "score": score})
+        score = 0.0
+        for token, qf in query_counts.items():
+            tf = counts.get(token, 0)
+            if not tf:
+                continue
+            idf = math.log(1 + (total_docs - doc_freq[token] + 0.5) / (doc_freq[token] + 0.5))
+            denom = tf + 1.2 * (1 - 0.75 + 0.75 * doc_len / max(avg_len, 1))
+            score += idf * (tf * 2.2 / denom) * min(qf, 3)
+
+        title = doc.get("title", "")
+        date = doc.get("date", "")
+        if title and title in query:
+            score += 3.0
+        if date and date in query:
+            score += 50.0 if query_dates else 1.5
+        elif query_dates:
+            score *= 0.35
+        if score > 0:
+            ranked.append({**doc, "score": score})
     ranked.sort(key=lambda item: item["score"], reverse=True)
     return ranked[:top_k]
 
@@ -363,6 +437,7 @@ async function send(ev){ev.preventDefault();const text=q.value.trim();if(!text)r
 def main() -> None:
     load_env(Path(os.getenv("ENV_FILE", "/opt/rag-challenge/.env")))
     docs = build_documents_from_questions_html(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    docs = merge_article_cache(docs, load_article_cache())
     RagHandler.docs = docs
     RagHandler.username = os.getenv("APP_USERNAME", "reviewer")
     RagHandler.password = os.getenv("APP_PASSWORD", "change-me")
