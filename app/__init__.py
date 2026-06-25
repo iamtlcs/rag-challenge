@@ -1,0 +1,1 @@
+"""TKE RAG Challenge application."""
