@@ -130,18 +130,67 @@ def compose_answer(question: str, results: list[dict[str, Any]]) -> dict[str, An
             "sources": [],
         }
     top = results[0]
-    snippets = []
-    for item in results[:3]:
-        text = item.get("text", "")
-        if text:
-            snippets.append(text[:260])
-    answer = (
-        f"根据本地开源检索模型，最相关来源是《{top.get('title', '')}》"
-        f"{'（' + top.get('date', '') + '）' if top.get('date') else ''}。"
-        + " ".join(snippets)
-        + " 以上回答仅基于列出的来源内容。"
-    )
+    answer = direct_answer(question, top)
     return {"answer": answer, "mode": "local-extractive", "sources": source_payload(results)}
+
+
+def direct_answer(question: str, top: dict[str, Any]) -> str:
+    normalized = question.lower()
+    title = top.get("title", "")
+    date = top.get("date", "")
+    text = clean_evidence_text(str(top.get("text", "")), title)
+
+    if date and (
+        "what date" in normalized
+        or "when" in normalized
+        or "哪一天" in question
+        or "什么时候" in question
+        or "日期" in question
+    ):
+        return f"事件发生日期是 {date}。"
+
+    if "主要讲述" in question or "mainly describe" in normalized or "what aspect" in normalized:
+        evidence = first_good_sentence(text) or title
+        return f"这篇报道主要讲述：{evidence}"
+
+    if "在哪里" in question or "where" in normalized:
+        evidence = first_good_sentence(text) or "来源中未给出明确地点"
+        return f"相关地点信息：{evidence}"
+
+    if "多少" in question or "how many" in normalized:
+        number = re.search(r"\d+", text)
+        if number:
+            return f"文中提到的数量是 {number.group(0)}。"
+
+    if "荣誉" in question or "获奖" in question or "honor" in normalized or "award" in normalized:
+        evidence = first_good_sentence(text) or title
+        return f"相关荣誉或成果是：{evidence}"
+
+    evidence = first_good_sentence(text) or text[:180] or title
+    suffix = f" 来源：《{title}》" if title else ""
+    return f"{evidence}{suffix}"
+
+
+def clean_evidence_text(text: str, title: str) -> str:
+    clean = re.sub(r"\s+", " ", text).strip()
+    if title:
+        clean = clean.replace(title, " ")
+    clean = re.sub(r"What aspect.*?(?:describe\?|$)", " ", clean)
+    clean = re.sub(r"On what date.*?(?:occur\?|$)", " ", clean)
+    clean = re.sub(r"Where was.*?(?:held\?|$)", " ", clean)
+    clean = re.sub(r"What honor.*?(?:receive\?|$)", " ", clean)
+    clean = re.sub(r"文章《[^》]+》[^？]*？", " ", clean)
+    clean = re.sub(r"《[^》]+》这篇报道[^？]*？", " ", clean)
+    return re.sub(r"\s+", " ", clean).strip()
+
+
+def first_good_sentence(text: str) -> str:
+    parts = re.split(r"(?<=[。！？!?])\s*", text)
+    for part in parts:
+        clean = part.strip()
+        if clean and len(clean) >= 8:
+            return clean
+    return text.strip()
 
 
 def source_payload(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
