@@ -57,3 +57,64 @@ def compose_extractive_answer(
         answer += " 以上回答仅基于列出的来源内容。"
 
     return Answer(answer=answer, sources=_citations(results))
+
+
+def answer_question(
+    question: str,
+    results: list[RetrievalResult],
+    *,
+    openai_api_key: str | None = None,
+    openai_model: str = "gpt-4.1-mini",
+    max_context_chars: int = 9000,
+) -> Answer:
+    if not openai_api_key or not results:
+        return compose_extractive_answer(question, results)
+
+    try:
+        from openai import OpenAI
+
+        context_parts: list[str] = []
+        current_len = 0
+        for idx, result in enumerate(results, start=1):
+            block = (
+                f"[{idx}] {result.title}\n"
+                f"URL: {result.url}\n"
+                f"Date: {result.date}\n"
+                f"Column: {result.column}\n"
+                f"{result.text}\n"
+            )
+            if current_len + len(block) > max_context_chars:
+                break
+            context_parts.append(block)
+            current_len += len(block)
+
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model=openai_model,
+            temperature=0.1,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer only from the provided Tsinghua School of Software "
+                        "sources. Reply in the user's language when possible. Include "
+                        "brief source references like [1]. If evidence is insufficient, "
+                        "say so clearly."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Question:\n{question}\n\n"
+                        f"Sources:\n{'\n'.join(context_parts)}"
+                    ),
+                },
+            ],
+        )
+        content = response.choices[0].message.content or ""
+        if content.strip():
+            return Answer(answer=content.strip(), sources=_citations(results), mode="llm")
+    except Exception:
+        pass
+
+    return compose_extractive_answer(question, results)

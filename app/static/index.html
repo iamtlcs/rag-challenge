@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>TKE RAG Chat</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="login-view" id="loginView">
+      <div class="brand-mark" aria-hidden="true">
+        <span>THSS</span>
+      </div>
+      <div class="login-panel">
+        <p class="eyebrow">TKE Interview Lab</p>
+        <h1>RAG Knowledge Chat</h1>
+        <form id="loginForm" class="login-form">
+          <label>
+            Username
+            <input id="username" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Sign in</button>
+          <p class="error" id="loginError" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="chat-view hidden" id="chatView">
+      <aside class="side-panel">
+        <div>
+          <p class="eyebrow">Corpus</p>
+          <h2>清华大学软件学院</h2>
+          <p class="muted" id="healthText">Checking index</p>
+        </div>
+        <div class="source-list" id="sourceList"></div>
+        <a class="challenge-link" href="/challenge/questions.html" target="_blank" rel="noreferrer">Question set</a>
+      </aside>
+
+      <section class="conversation">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">Authenticated Chat</p>
+            <h1>TKE RAG Assistant</h1>
+          </div>
+          <button class="ghost" id="logoutButton" type="button">Sign out</button>
+        </header>
+
+        <div class="messages" id="messages" aria-live="polite"></div>
+
+        <form class="composer" id="chatForm">
+          <textarea id="messageInput" rows="2" maxlength="2000" placeholder="Ask about the Tsinghua School of Software corpus..." required></textarea>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>
