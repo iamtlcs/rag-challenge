@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +10,7 @@ class Settings(BaseSettings):
 
     app_username: str = "reviewer"
     app_password: str = "change-me"
-    session_secret: str = Field(default="dev-session-secret-change-me", min_length=8)
+    session_secret: str = "dev-session-secret-change-me"
     session_max_age_seconds: int = 60 * 60 * 12
     cookie_secure: bool = False
 

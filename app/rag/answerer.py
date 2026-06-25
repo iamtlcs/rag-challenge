@@ -89,6 +89,7 @@ def answer_question(
             current_len += len(block)
 
         client = OpenAI(api_key=openai_api_key)
+        context_text = "\n".join(context_parts)
         response = client.chat.completions.create(
             model=openai_model,
             temperature=0.1,
@@ -106,7 +107,7 @@ def answer_question(
                     "role": "user",
                     "content": (
                         f"Question:\n{question}\n\n"
-                        f"Sources:\n{'\n'.join(context_parts)}"
+                        f"Sources:\n{context_text}"
                     ),
                 },
             ],
