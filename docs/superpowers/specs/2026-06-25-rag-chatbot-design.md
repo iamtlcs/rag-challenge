@@ -19,7 +19,7 @@ Alternatives considered:
 - Corpus store: JSONL records with URL, title, date, column, body text, image URLs, and crawl timestamp. The raw corpus is generated on the server and ignored by git.
 - Indexer: chunks article bodies and builds a scikit-learn character n-gram TF-IDF index. Character n-grams work well for mixed Chinese and English without a separate tokenizer.
 - Retriever: ranks chunks by cosine similarity and returns source metadata with scores.
-- Answerer: uses OpenAI-compatible generation if `OPENAI_API_KEY` is configured. Otherwise it creates an extractive answer from top chunks so the deployed app remains functional without external secrets.
+- Answerer: uses local Ollama generation if `OLLAMA_BASE_URL` and `OLLAMA_MODEL` are configured. Otherwise it creates an extractive answer from top chunks so the deployed app remains functional without paid API keys or external secrets.
 - Web app: FastAPI session cookie authentication, static login/chat UI, `/api/chat`, `/api/health`, and static `/challenge/` pages.
 - Deployment: systemd runs Uvicorn on localhost; Nginx terminates HTTPS on `8443` and reverse proxies to the app.
 

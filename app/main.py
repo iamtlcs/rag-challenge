@@ -81,8 +81,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         answer = answer_question(
             payload.message,
             results,
-            openai_api_key=app_settings.openai_api_key,
-            openai_model=app_settings.openai_model,
+            ollama_base_url=app_settings.ollama_base_url,
+            ollama_model=app_settings.ollama_model,
             max_context_chars=app_settings.rag_max_context_chars,
         )
         return {

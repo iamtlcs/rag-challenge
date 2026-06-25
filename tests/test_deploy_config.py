@@ -17,4 +17,5 @@ def test_env_example_does_not_contain_secret_values():
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "sk-" not in env_example
-    assert "OPENAI_API_KEY=" in env_example
+    assert "OPENAI_API_KEY" not in env_example
+    assert "OLLAMA_MODEL=" in env_example

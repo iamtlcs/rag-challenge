@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     rag_top_k: int = 5
     rag_max_context_chars: int = 9000
 
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4.1-mini"
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
 
     @property
     def index_dir(self) -> Path:

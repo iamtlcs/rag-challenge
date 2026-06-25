@@ -63,15 +63,15 @@ def answer_question(
     question: str,
     results: list[RetrievalResult],
     *,
-    openai_api_key: str | None = None,
-    openai_model: str = "gpt-4.1-mini",
+    ollama_base_url: str | None = None,
+    ollama_model: str | None = None,
     max_context_chars: int = 9000,
 ) -> Answer:
-    if not openai_api_key or not results:
+    if not ollama_base_url or not ollama_model or not results:
         return compose_extractive_answer(question, results)
 
     try:
-        from openai import OpenAI
+        import httpx
 
         context_parts: list[str] = []
         current_len = 0
@@ -88,33 +88,26 @@ def answer_question(
             context_parts.append(block)
             current_len += len(block)
 
-        client = OpenAI(api_key=openai_api_key)
         context_text = "\n".join(context_parts)
-        response = client.chat.completions.create(
-            model=openai_model,
-            temperature=0.1,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Answer only from the provided Tsinghua School of Software "
-                        "sources. Reply in the user's language when possible. Include "
-                        "brief source references like [1]. If evidence is insufficient, "
-                        "say so clearly."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question:\n{question}\n\n"
-                        f"Sources:\n{context_text}"
-                    ),
-                },
-            ],
+        payload = {
+            "model": ollama_model,
+            "stream": False,
+            "prompt": (
+                "Answer only from the provided Tsinghua School of Software sources. "
+                "Reply in the user's language when possible. Include brief source "
+                "references like [1]. If evidence is insufficient, say so clearly.\n\n"
+                f"Question:\n{question}\n\nSources:\n{context_text}"
+            ),
+        }
+        response = httpx.post(
+            f"{ollama_base_url.rstrip('/')}/api/generate",
+            json=payload,
+            timeout=60,
         )
-        content = response.choices[0].message.content or ""
+        response.raise_for_status()
+        content = response.json().get("response", "")
         if content.strip():
-            return Answer(answer=content.strip(), sources=_citations(results), mode="llm")
+            return Answer(answer=content.strip(), sources=_citations(results), mode="ollama")
     except Exception:
         pass
 

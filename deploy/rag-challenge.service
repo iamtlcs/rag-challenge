@@ -6,7 +6,9 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/rag-challenge
 EnvironmentFile=/opt/rag-challenge/.env
-ExecStart=/opt/rag-challenge/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Environment=HOST=127.0.0.1
+Environment=PORT=8000
+ExecStart=/usr/bin/python3 -m app.standalone
 Restart=always
 RestartSec=5
 User=root

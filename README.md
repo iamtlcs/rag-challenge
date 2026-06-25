@@ -8,8 +8,8 @@ Authenticated RAG chatbot for the TKE Interview Lab challenge. The app crawls an
 - FastAPI + Uvicorn
 - BeautifulSoup crawler with polite rate limiting
 - scikit-learn TF-IDF character n-gram retrieval
-- Optional OpenAI-compatible generation when `OPENAI_API_KEY` is set
-- Extractive answer composer fallback when no LLM key is configured
+- Optional local Ollama generation when `OLLAMA_BASE_URL` and `OLLAMA_MODEL` are set
+- Extractive local answer composer fallback when no model server is configured
 - Static HTML/CSS/JS frontend
 - Nginx + systemd deployment on `123.59.90.15:8443`
 
@@ -73,9 +73,19 @@ Required:
 
 Optional:
 
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `OLLAMA_BASE_URL`
+- `OLLAMA_MODEL`
 - `RAG_TOP_K`
 - `RAG_MAX_CONTEXT_CHARS`
 
-When no OpenAI key is present, the app still answers by composing a concise extractive response from retrieved source chunks.
+No paid API key is required. When no Ollama model server is configured, the app still answers by composing a concise extractive response from retrieved source chunks.
+
+## Hard-Copy Deployment
+
+For restricted servers, copy the repository files directly to `/opt/rag-challenge`, keep secrets only in `/opt/rag-challenge/.env`, and run:
+
+```bash
+bash /opt/rag-challenge/deploy/hard-copy-deploy.sh
+```
+
+This path uses only the system Python 3 standard library and does not install pip packages.
